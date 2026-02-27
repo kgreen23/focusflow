@@ -1,4 +1,4 @@
-const CACHE_NAME = 'focusflow-v1';
+const CACHE_NAME = 'focusflow-v2';
 const ASSETS = [
   './',
   './index.html',
@@ -27,11 +27,15 @@ self.addEventListener('activate', e => {
 self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
 
+  // Skip non-http(s) requests (fixes chrome-extension:// errors)
+  if (!url.protocol.startsWith('http')) return;
+
   // Let Firebase SDK handle its own requests
   if (url.hostname.includes('firebaseio.com') ||
       url.hostname.includes('googleapis.com') ||
       url.hostname.includes('firestore.googleapis.com') ||
-      url.hostname.includes('gstatic.com')) {
+      url.hostname.includes('gstatic.com') ||
+      url.hostname.includes('accounts.google.com')) {
     return;
   }
 

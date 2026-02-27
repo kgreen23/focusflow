@@ -1253,6 +1253,18 @@ async function initFirebase() {
   firebaseReady = true;
 
   // Listen for auth changes
+  // Handle redirect result (runs after returning from Google sign-in)
+  firebase.auth().getRedirectResult().then(result => {
+    if (result.user) {
+      showToast('Signed in as ' + (result.user.displayName || result.user.email));
+    }
+  }).catch(err => {
+    console.error('Redirect result error:', err);
+    if (err.code !== 'auth/popup-closed-by-user') {
+      showToast('Sign-in error: ' + err.message);
+    }
+  });
+
   firebase.auth().onAuthStateChanged(user => {
     firebaseUser = user;
     updateSyncUI();
@@ -1282,9 +1294,10 @@ function handleAuthClick() {
     }
   } else {
     const provider = new firebase.auth.GoogleAuthProvider();
-    firebase.auth().signInWithPopup(provider).catch(err => {
-      // Fallback to redirect for mobile
-      firebase.auth().signInWithRedirect(provider);
+    // Use redirect instead of popup — more reliable across browsers
+    firebase.auth().signInWithRedirect(provider).catch(err => {
+      console.error('Sign-in redirect error:', err);
+      showToast('Sign-in failed: ' + err.message);
     });
   }
 }
