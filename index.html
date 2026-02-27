@@ -1,0 +1,1463 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FocusFlow — Focus Timer & Goal Tracker</title>
+<meta name="description" content="Track focus sessions, set goals, and build better work habits.">
+<meta name="theme-color" content="#6c5ce7">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #242836;
+    --border: #2e3345;
+    --text: #e4e6ef;
+    --text-muted: #8b8fa3;
+    --accent: #6c5ce7;
+    --accent-light: #a29bfe;
+    --green: #00b894;
+    --green-bg: rgba(0,184,148,.12);
+    --orange: #fdcb6e;
+    --orange-bg: rgba(253,203,110,.12);
+    --red: #ff6b6b;
+    --red-bg: rgba(255,107,107,.12);
+    --blue: #74b9ff;
+    --blue-bg: rgba(116,185,255,.12);
+    --radius: 12px;
+    --shadow: 0 4px 24px rgba(0,0,0,.3);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    min-height: 100dvh;
+    overflow-x: hidden;
+  }
+
+  /* ─── Layout ─────────────────────────────── */
+  .app { display: flex; min-height: 100vh; min-height: 100dvh; }
+
+  .sidebar {
+    width: 240px;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    padding: 20px 14px;
+    display: flex;
+    flex-direction: column;
+    position: fixed;
+    top: 0; left: 0; bottom: 0;
+    z-index: 10;
+    transition: transform .25s ease;
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 8px 20px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 14px;
+  }
+
+  .logo-icon {
+    width: 34px; height: 34px;
+    background: linear-gradient(135deg, var(--accent), var(--accent-light));
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px;
+  }
+
+  .logo-text { font-size: 19px; font-weight: 700; letter-spacing: -.5px; }
+
+  .nav { list-style: none; flex: 1; }
+
+  .nav li {
+    padding: 10px 14px;
+    border-radius: 8px;
+    cursor: pointer;
+    display: flex; align-items: center; gap: 10px;
+    font-size: 14px;
+    color: var(--text-muted);
+    transition: all .15s;
+    margin-bottom: 2px;
+  }
+
+  .nav li:hover { background: var(--surface2); color: var(--text); }
+  .nav li.active { background: var(--accent); color: #fff; }
+  .nav li .icon { font-size: 17px; width: 22px; text-align: center; }
+
+  /* Sync & user status in sidebar */
+  .sidebar-footer {
+    margin-top: auto;
+    border-top: 1px solid var(--border);
+    padding-top: 14px;
+  }
+
+  .user-bar {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: background .15s;
+  }
+
+  .user-bar:hover { background: var(--surface2); }
+
+  .user-avatar {
+    width: 30px; height: 30px;
+    border-radius: 50%;
+    background: var(--surface2);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+
+  .user-avatar img { width: 100%; height: 100%; object-fit: cover; }
+
+  .user-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .sync-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .sync-dot.online { background: var(--green); }
+  .sync-dot.offline { background: var(--orange); }
+  .sync-dot.none { background: var(--text-muted); }
+
+  .main {
+    margin-left: 240px;
+    flex: 1;
+    padding: 28px 36px;
+    max-width: 1050px;
+  }
+
+  .page { display: none; }
+  .page.active { display: block; }
+
+  h1 { font-size: 26px; font-weight: 700; margin-bottom: 6px; }
+  .subtitle { color: var(--text-muted); font-size: 14px; margin-bottom: 24px; }
+
+  /* ─── Mobile Nav ─────────────────────────── */
+  .mobile-nav {
+    display: none;
+    position: fixed; bottom: 0; left: 0; right: 0;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    z-index: 20;
+    padding: 6px 0 env(safe-area-inset-bottom, 6px);
+  }
+
+  .mobile-nav-inner {
+    display: flex; justify-content: space-around;
+  }
+
+  .mobile-nav-btn {
+    background: none; border: none; color: var(--text-muted);
+    font-size: 11px; padding: 6px 12px; cursor: pointer;
+    display: flex; flex-direction: column; align-items: center; gap: 2px;
+    transition: color .15s;
+  }
+
+  .mobile-nav-btn .icon { font-size: 20px; }
+  .mobile-nav-btn.active { color: var(--accent-light); }
+
+  /* ─── Install banner ─────────────────────── */
+  .install-banner {
+    background: linear-gradient(135deg, var(--accent), #5b4bd5);
+    border-radius: var(--radius);
+    padding: 16px 20px;
+    margin-bottom: 20px;
+    display: none;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .install-banner.show { display: flex; }
+  .install-banner-text { flex: 1; font-size: 14px; }
+  .install-banner-text strong { display: block; margin-bottom: 2px; }
+
+  .install-banner .btn { white-space: nowrap; }
+
+  /* ─── Cards ──────────────────────────────── */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 22px;
+    margin-bottom: 18px;
+  }
+
+  .card-header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 14px;
+  }
+
+  .card-title { font-size: 15px; font-weight: 600; }
+
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+  .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+
+  /* ─── Timer ──────────────────────────────── */
+  .timer-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 32px 0;
+  }
+
+  .timer-ring-wrap {
+    position: relative;
+    width: 260px; height: 260px;
+    margin-bottom: 28px;
+  }
+
+  .timer-ring { width: 100%; height: 100%; transform: rotate(-90deg); }
+
+  .timer-ring-bg { fill: none; stroke: var(--surface2); stroke-width: 8; }
+
+  .timer-ring-progress {
+    fill: none; stroke: var(--accent); stroke-width: 8;
+    stroke-linecap: round; transition: stroke-dashoffset .5s ease;
+  }
+
+  .timer-display {
+    position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%, -50%); text-align: center;
+  }
+
+  .timer-time {
+    font-size: 52px; font-weight: 700;
+    font-variant-numeric: tabular-nums; letter-spacing: -2px;
+  }
+
+  .timer-label {
+    font-size: 12px; color: var(--text-muted); margin-top: 4px;
+    text-transform: uppercase; letter-spacing: 1px;
+  }
+
+  .timer-presets { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; justify-content: center; }
+
+  .preset-btn {
+    padding: 7px 16px; border-radius: 20px;
+    border: 1px solid var(--border); background: transparent;
+    color: var(--text-muted); font-size: 13px; cursor: pointer;
+    transition: all .15s;
+  }
+
+  .preset-btn:hover { border-color: var(--accent); color: var(--text); }
+  .preset-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+  .timer-task-input {
+    width: 320px; max-width: 90vw; padding: 10px 16px;
+    border-radius: 8px; border: 1px solid var(--border);
+    background: var(--surface2); color: var(--text);
+    font-size: 14px; text-align: center; margin-bottom: 20px; outline: none;
+  }
+
+  .timer-task-input::placeholder { color: var(--text-muted); }
+  .timer-task-input:focus { border-color: var(--accent); }
+
+  .timer-controls { display: flex; gap: 10px; }
+
+  .btn {
+    padding: 11px 28px; border-radius: 10px; border: none;
+    font-size: 14px; font-weight: 600; cursor: pointer; transition: all .15s;
+  }
+
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover { background: #5b4bd5; }
+  .btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+  .btn-secondary:hover { background: var(--border); }
+  .btn-danger { background: var(--red); color: #fff; }
+  .btn-danger:hover { opacity: .85; }
+  .btn-sm { padding: 6px 14px; font-size: 13px; border-radius: 6px; }
+  .btn-outline { background: transparent; border: 1px solid rgba(255,255,255,.3); color: #fff; }
+  .btn-outline:hover { background: rgba(255,255,255,.1); }
+
+  /* ─── Stats ──────────────────────────────── */
+  .stat-box {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 18px; text-align: center;
+  }
+
+  .stat-value { font-size: 30px; font-weight: 700; }
+  .stat-label { font-size: 11px; color: var(--text-muted); margin-top: 4px; text-transform: uppercase; letter-spacing: .5px; }
+
+  /* ─── Goals ──────────────────────────────── */
+  .goal-item {
+    display: flex; align-items: center; gap: 14px;
+    padding: 14px 0; border-bottom: 1px solid var(--border);
+  }
+
+  .goal-item:last-child { border-bottom: none; }
+
+  .goal-icon {
+    width: 40px; height: 40px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px; flex-shrink: 0;
+  }
+
+  .goal-info { flex: 1; min-width: 0; }
+  .goal-name { font-size: 14px; font-weight: 600; margin-bottom: 3px; }
+  .goal-meta { font-size: 12px; color: var(--text-muted); }
+
+  .goal-progress { width: 150px; flex-shrink: 0; }
+
+  .progress-bar {
+    height: 7px; background: var(--surface2);
+    border-radius: 4px; overflow: hidden; margin-bottom: 4px;
+  }
+
+  .progress-fill { height: 100%; border-radius: 4px; transition: width .4s ease; }
+  .progress-text { font-size: 11px; color: var(--text-muted); text-align: right; }
+
+  /* ─── Sessions ───────────────────────────── */
+  .session-item {
+    display: flex; align-items: center; gap: 12px;
+    padding: 11px 0; border-bottom: 1px solid var(--border); font-size: 14px;
+  }
+
+  .session-item:last-child { border-bottom: none; }
+  .session-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+  .session-task { flex: 1; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .session-duration { color: var(--accent-light); font-weight: 600; min-width: 55px; text-align: right; }
+  .session-time { color: var(--text-muted); font-size: 12px; min-width: 80px; text-align: right; }
+
+  /* ─── Bar Chart ──────────────────────────── */
+  .bar-chart {
+    display: flex; align-items: flex-end; gap: 8px;
+    height: 150px; padding-top: 14px;
+  }
+
+  .bar-col {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; gap: 5px; height: 100%; justify-content: flex-end;
+  }
+
+  .bar {
+    width: 100%; max-width: 38px; background: var(--accent);
+    border-radius: 4px 4px 0 0; min-height: 4px; transition: height .4s ease;
+  }
+
+  .bar:hover { opacity: .85; }
+  .bar-label { font-size: 11px; color: var(--text-muted); }
+  .bar-value { font-size: 11px; color: var(--text); font-weight: 600; }
+
+  /* ─── Modal ──────────────────────────────── */
+  .modal-overlay {
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,.6);
+    display: none; align-items: center; justify-content: center;
+    z-index: 100;
+  }
+
+  .modal-overlay.show { display: flex; }
+
+  .modal {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 24px;
+    width: 400px; max-width: 90vw;
+  }
+
+  .modal h2 { font-size: 18px; margin-bottom: 18px; }
+
+  .form-group { margin-bottom: 14px; }
+
+  .form-group label {
+    display: block; font-size: 13px;
+    color: var(--text-muted); margin-bottom: 5px;
+  }
+
+  .form-group input, .form-group select {
+    width: 100%; padding: 9px 12px; border-radius: 8px;
+    border: 1px solid var(--border); background: var(--surface2);
+    color: var(--text); font-size: 14px; outline: none;
+  }
+
+  .form-group input:focus, .form-group select:focus { border-color: var(--accent); }
+
+  .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 18px; }
+
+  /* ─── Empty ──────────────────────────────── */
+  .empty { text-align: center; padding: 36px; color: var(--text-muted); font-size: 14px; }
+  .empty .icon { font-size: 36px; margin-bottom: 10px; }
+
+  /* ─── Streak ─────────────────────────────── */
+  .streak-dots { display: flex; gap: 6px; justify-content: center; margin-top: 8px; }
+
+  .streak-dot {
+    width: 24px; height: 24px; border-radius: 6px; font-size: 10px;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--text-muted);
+  }
+
+  .streak-dot.done { background: var(--green-bg); color: var(--green); }
+  .streak-dot.today { border: 2px solid var(--accent); }
+  .streak-dot.empty { background: var(--surface2); }
+
+  /* ─── Toast ──────────────────────────────── */
+  .toast {
+    position: fixed; bottom: 80px; right: 24px;
+    background: var(--surface); border: 1px solid var(--green);
+    border-radius: 10px; padding: 12px 18px;
+    font-size: 14px; box-shadow: var(--shadow); z-index: 200;
+    transform: translateY(100px); opacity: 0; transition: all .3s ease;
+  }
+
+  .toast.show { transform: translateY(0); opacity: 1; }
+
+  /* ─── Settings page ──────────────────────── */
+  .setting-row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 14px 0; border-bottom: 1px solid var(--border);
+  }
+
+  .setting-row:last-child { border-bottom: none; }
+  .setting-info { flex: 1; }
+  .setting-label { font-size: 14px; font-weight: 500; margin-bottom: 2px; }
+  .setting-desc { font-size: 12px; color: var(--text-muted); }
+
+  /* ─── Responsive ─────────────────────────── */
+  @media (max-width: 768px) {
+    .sidebar { transform: translateX(-100%); }
+    .main { margin-left: 0; padding: 20px 16px 100px; }
+    .mobile-nav { display: block; }
+    .grid-2, .grid-3 { grid-template-columns: 1fr; }
+    .grid-4 { grid-template-columns: 1fr 1fr; }
+    .goal-progress { width: 100px; }
+    .session-time { display: none; }
+    .install-banner { flex-direction: column; text-align: center; }
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <!-- Sidebar (desktop) -->
+  <aside class="sidebar">
+    <div class="logo">
+      <div class="logo-icon">⏱</div>
+      <div class="logo-text">FocusFlow</div>
+    </div>
+    <ul class="nav">
+      <li class="active" onclick="showPage('timer')">
+        <span class="icon">⏱</span><span>Focus Timer</span>
+      </li>
+      <li onclick="showPage('goals')">
+        <span class="icon">🎯</span><span>Goals</span>
+      </li>
+      <li onclick="showPage('history')">
+        <span class="icon">📊</span><span>History</span>
+      </li>
+      <li onclick="showPage('insights')">
+        <span class="icon">💡</span><span>Insights</span>
+      </li>
+      <li onclick="showPage('settings')">
+        <span class="icon">⚙️</span><span>Settings</span>
+      </li>
+    </ul>
+    <div class="sidebar-footer">
+      <div class="user-bar" id="user-bar" onclick="handleAuthClick()">
+        <div class="user-avatar" id="user-avatar">👤</div>
+        <div class="user-name" id="user-name">Sign in to sync</div>
+        <div class="sync-dot none" id="sync-dot"></div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Mobile Bottom Nav -->
+  <nav class="mobile-nav">
+    <div class="mobile-nav-inner">
+      <button class="mobile-nav-btn active" onclick="showPage('timer')">
+        <span class="icon">⏱</span>Timer
+      </button>
+      <button class="mobile-nav-btn" onclick="showPage('goals')">
+        <span class="icon">🎯</span>Goals
+      </button>
+      <button class="mobile-nav-btn" onclick="showPage('history')">
+        <span class="icon">📊</span>History
+      </button>
+      <button class="mobile-nav-btn" onclick="showPage('insights')">
+        <span class="icon">💡</span>Insights
+      </button>
+      <button class="mobile-nav-btn" onclick="showPage('settings')">
+        <span class="icon">⚙️</span>More
+      </button>
+    </div>
+  </nav>
+
+  <!-- Main Content -->
+  <div class="main">
+
+    <!-- Install Banner -->
+    <div class="install-banner" id="install-banner">
+      <div class="install-banner-text">
+        <strong>Install FocusFlow</strong>
+        Add to your home screen for the full app experience — works offline!
+      </div>
+      <button class="btn btn-outline btn-sm" onclick="installApp()">Install</button>
+      <button class="btn btn-outline btn-sm" onclick="dismissInstall()" style="opacity:.6">Later</button>
+    </div>
+
+    <!-- ═══ TIMER PAGE ═══ -->
+    <div id="page-timer" class="page active">
+      <h1>Focus Timer</h1>
+      <p class="subtitle">Start a focus session to track deep work and stay on task.</p>
+
+      <div class="grid-4" style="margin-bottom:24px">
+        <div class="stat-box">
+          <div class="stat-value" id="stat-today-sessions">0</div>
+          <div class="stat-label">Sessions Today</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-value" id="stat-today-minutes">0</div>
+          <div class="stat-label">Minutes Today</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-value" id="stat-streak">0</div>
+          <div class="stat-label">Day Streak</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-value" id="stat-total">0</div>
+          <div class="stat-label">Total Sessions</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="timer-container">
+          <div class="timer-ring-wrap">
+            <svg class="timer-ring" viewBox="0 0 260 260">
+              <circle class="timer-ring-bg" cx="130" cy="130" r="116"/>
+              <circle class="timer-ring-progress" id="timer-progress" cx="130" cy="130" r="116"
+                stroke-dasharray="729.2" stroke-dashoffset="0"/>
+            </svg>
+            <div class="timer-display">
+              <div class="timer-time" id="timer-time">25:00</div>
+              <div class="timer-label" id="timer-status">Ready</div>
+            </div>
+          </div>
+
+          <div class="timer-presets">
+            <button class="preset-btn" onclick="setPreset(this,15)">15 min</button>
+            <button class="preset-btn active" onclick="setPreset(this,25)">25 min</button>
+            <button class="preset-btn" onclick="setPreset(this,45)">45 min</button>
+            <button class="preset-btn" onclick="setPreset(this,60)">60 min</button>
+            <button class="preset-btn" onclick="setPreset(this,90)">90 min</button>
+          </div>
+
+          <input type="text" class="timer-task-input" id="timer-task"
+            placeholder="What are you working on?" maxlength="80">
+
+          <div class="timer-controls">
+            <button class="btn btn-primary" id="btn-start" onclick="startTimer()">Start Focus</button>
+            <button class="btn btn-secondary" id="btn-pause" onclick="pauseTimer()" style="display:none">Pause</button>
+            <button class="btn btn-danger" id="btn-stop" onclick="stopTimer()" style="display:none">End Session</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ GOALS PAGE ═══ -->
+    <div id="page-goals" class="page">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <h1>Goals</h1>
+        <button class="btn btn-primary btn-sm" onclick="openGoalModal()">+ New Goal</button>
+      </div>
+      <p class="subtitle">Set daily focus goals and track your progress over time.</p>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Active Goals</div>
+          <div style="font-size:12px;color:var(--text-muted)" id="goals-date"></div>
+        </div>
+        <div id="goals-list"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><div class="card-title">This Week</div></div>
+        <div class="streak-dots" id="week-streak"></div>
+        <div style="text-align:center;margin-top:10px;font-size:13px;color:var(--text-muted)" id="week-summary"></div>
+      </div>
+    </div>
+
+    <!-- ═══ HISTORY PAGE ═══ -->
+    <div id="page-history" class="page">
+      <h1>Session History</h1>
+      <p class="subtitle">Review your completed focus sessions.</p>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Recent Sessions</div>
+          <button class="btn btn-secondary btn-sm" onclick="clearHistory()">Clear All</button>
+        </div>
+        <div id="history-list"></div>
+      </div>
+    </div>
+
+    <!-- ═══ INSIGHTS PAGE ═══ -->
+    <div id="page-insights" class="page">
+      <h1>Insights</h1>
+      <p class="subtitle">Understand your focus patterns and improve over time.</p>
+
+      <div class="grid-3" style="margin-bottom:18px">
+        <div class="stat-box">
+          <div class="stat-value" id="insight-avg" style="color:var(--accent-light)">0</div>
+          <div class="stat-label">Avg Min / Session</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-value" id="insight-best" style="color:var(--green)">—</div>
+          <div class="stat-label">Most Productive Day</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-value" id="insight-total" style="color:var(--orange)">0h</div>
+          <div class="stat-label">Total Focus Time</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><div class="card-title">Focus Minutes — Last 7 Days</div></div>
+        <div class="bar-chart" id="chart-weekly"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><div class="card-title">Top Tasks</div></div>
+        <div id="top-tasks"></div>
+      </div>
+    </div>
+
+    <!-- ═══ SETTINGS PAGE ═══ -->
+    <div id="page-settings" class="page">
+      <h1>Settings</h1>
+      <p class="subtitle">Configure sync, notifications, and data management.</p>
+
+      <div class="card">
+        <div class="card-header"><div class="card-title">Cloud Sync</div></div>
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-label" id="settings-sync-status">Not connected</div>
+            <div class="setting-desc" id="settings-sync-desc">Sign in with Google to sync your data across devices.</div>
+          </div>
+          <button class="btn btn-primary btn-sm" id="settings-auth-btn" onclick="handleAuthClick()">Sign In</button>
+        </div>
+        <div class="setting-row" id="force-sync-row" style="display:none">
+          <div class="setting-info">
+            <div class="setting-label">Manual Sync</div>
+            <div class="setting-desc">Force sync your data with the cloud now.</div>
+          </div>
+          <button class="btn btn-secondary btn-sm" onclick="forceSync()">Sync Now</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><div class="card-title">Notifications</div></div>
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-label">Session Complete Alerts</div>
+            <div class="setting-desc">Get a browser notification when your focus session ends.</div>
+          </div>
+          <button class="btn btn-secondary btn-sm" onclick="requestNotifPermission()">Enable</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><div class="card-title">Data</div></div>
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-label">Export Data</div>
+            <div class="setting-desc">Download all your sessions and goals as JSON.</div>
+          </div>
+          <button class="btn btn-secondary btn-sm" onclick="exportData()">Export</button>
+        </div>
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-label">Import Data</div>
+            <div class="setting-desc">Restore from a previous export.</div>
+          </div>
+          <button class="btn btn-secondary btn-sm" onclick="document.getElementById('import-file').click()">Import</button>
+          <input type="file" id="import-file" accept=".json" style="display:none" onchange="importData(event)">
+        </div>
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-label" style="color:var(--red)">Delete All Data</div>
+            <div class="setting-desc">Permanently erase all local data. Cannot be undone.</div>
+          </div>
+          <button class="btn btn-danger btn-sm" onclick="nukeData()">Delete</button>
+        </div>
+      </div>
+
+      <div class="card" id="firebase-setup-card">
+        <div class="card-header"><div class="card-title">Firebase Setup</div></div>
+        <div class="setting-row" style="flex-direction:column;align-items:stretch;gap:12px">
+          <div class="setting-desc">
+            Paste your Firebase config JSON to enable cloud sync.
+            See the setup guide (SETUP.md) for step-by-step instructions.
+          </div>
+          <textarea id="firebase-config-input" rows="6" style="width:100%;padding:10px;border-radius:8px;
+            border:1px solid var(--border);background:var(--surface2);color:var(--text);
+            font-family:monospace;font-size:12px;resize:vertical;outline:none"
+            placeholder='{
+  "apiKey": "your-api-key",
+  "authDomain": "your-project.firebaseapp.com",
+  "projectId": "your-project-id",
+  "storageBucket": "your-project.appspot.com",
+  "messagingSenderId": "123456789",
+  "appId": "1:123:web:abc"
+}'></textarea>
+          <div style="display:flex;gap:10px">
+            <button class="btn btn-primary btn-sm" onclick="saveFirebaseConfig()">Save Config</button>
+            <button class="btn btn-secondary btn-sm" onclick="clearFirebaseConfig()">Clear</button>
+          </div>
+          <div id="firebase-config-status" style="font-size:12px;color:var(--text-muted)"></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Goal Modal -->
+<div class="modal-overlay" id="goal-modal">
+  <div class="modal">
+    <h2>New Goal</h2>
+    <div class="form-group">
+      <label>Goal Name</label>
+      <input type="text" id="goal-name" placeholder="e.g., Deep Work" maxlength="40">
+    </div>
+    <div class="form-group">
+      <label>Daily Target (minutes)</label>
+      <input type="number" id="goal-target" placeholder="120" min="5" max="720" value="120">
+    </div>
+    <div class="form-group">
+      <label>Category</label>
+      <select id="goal-category">
+        <option value="work">💼 Work</option>
+        <option value="study">📚 Study</option>
+        <option value="creative">🎨 Creative</option>
+        <option value="health">💪 Health</option>
+        <option value="personal">🧘 Personal</option>
+      </select>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeGoalModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveGoal()">Save Goal</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════
+// LOCAL DATA LAYER
+// ═══════════════════════════════════════════════════════
+const STORAGE_KEY = 'focusflow_data';
+const CONFIG_KEY  = 'focusflow_firebase_config';
+
+function loadData() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch(e) {}
+  return { sessions: [], goals: [], lastSync: null };
+}
+
+function saveLocal(d) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(d));
+}
+
+let data = loadData();
+
+// ═══════════════════════════════════════════════════════
+// NAVIGATION
+// ═══════════════════════════════════════════════════════
+const pages = ['timer','goals','history','insights','settings'];
+
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav li').forEach(n => n.classList.remove('active'));
+  document.querySelectorAll('.mobile-nav-btn').forEach(b => b.classList.remove('active'));
+
+  document.getElementById('page-' + name).classList.add('active');
+  const idx = pages.indexOf(name);
+  document.querySelectorAll('.nav li')[idx]?.classList.add('active');
+  document.querySelectorAll('.mobile-nav-btn')[idx]?.classList.add('active');
+
+  if (name === 'goals') renderGoals();
+  if (name === 'history') renderHistory();
+  if (name === 'insights') renderInsights();
+  if (name === 'settings') renderSettings();
+}
+
+// ═══════════════════════════════════════════════════════
+// TIMER
+// ═══════════════════════════════════════════════════════
+let timerInterval = null;
+let timerSeconds = 25 * 60;
+let timerTotal = 25 * 60;
+let timerRunning = false;
+let timerPaused = false;
+
+const CIRCUMFERENCE = 2 * Math.PI * 116;
+
+function setPreset(el, mins) {
+  if (timerRunning) return;
+  timerSeconds = mins * 60;
+  timerTotal = mins * 60;
+  updateTimerDisplay();
+  document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+}
+
+function updateTimerDisplay() {
+  const m = Math.floor(timerSeconds / 60);
+  const s = timerSeconds % 60;
+  document.getElementById('timer-time').textContent =
+    String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
+
+  const progress = (timerTotal - timerSeconds) / timerTotal;
+  const offset = CIRCUMFERENCE * (1 - progress);
+  document.getElementById('timer-progress').style.strokeDashoffset = offset;
+
+  // Update page title
+  if (timerRunning || timerPaused) {
+    document.title = `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')} — FocusFlow`;
+  } else {
+    document.title = 'FocusFlow — Focus Timer & Goal Tracker';
+  }
+}
+
+function startTimer() {
+  if (timerPaused) {
+    timerPaused = false;
+    timerRunning = true;
+    document.getElementById('timer-status').textContent = 'Focusing';
+    document.getElementById('btn-pause').textContent = 'Pause';
+    timerInterval = setInterval(tick, 1000);
+    return;
+  }
+
+  timerRunning = true;
+  timerPaused = false;
+  document.getElementById('btn-start').style.display = 'none';
+  document.getElementById('btn-pause').style.display = '';
+  document.getElementById('btn-stop').style.display = '';
+  document.getElementById('timer-status').textContent = 'Focusing';
+  document.getElementById('timer-task').disabled = true;
+  document.querySelectorAll('.preset-btn').forEach(b => b.style.pointerEvents = 'none');
+
+  timerInterval = setInterval(tick, 1000);
+}
+
+function tick() {
+  timerSeconds--;
+  updateTimerDisplay();
+  if (timerSeconds <= 0) completeSession();
+}
+
+function pauseTimer() {
+  if (timerPaused) { startTimer(); return; }
+  timerPaused = true;
+  timerRunning = false;
+  clearInterval(timerInterval);
+  document.getElementById('timer-status').textContent = 'Paused';
+  document.getElementById('btn-pause').textContent = 'Resume';
+}
+
+function stopTimer() {
+  const elapsed = timerTotal - timerSeconds;
+  if (elapsed >= 60) recordSession(elapsed);
+  resetTimer();
+}
+
+function completeSession() {
+  clearInterval(timerInterval);
+  recordSession(timerTotal);
+  resetTimer();
+  showToast('🎉 Focus session complete! Great work.');
+
+  if ('Notification' in window && Notification.permission === 'granted') {
+    new Notification('FocusFlow', { body: 'Focus session complete! Great work.', icon: 'icon-192.png' });
+  }
+}
+
+function resetTimer() {
+  clearInterval(timerInterval);
+  timerRunning = false;
+  timerPaused = false;
+  timerSeconds = timerTotal;
+  updateTimerDisplay();
+  document.getElementById('btn-start').style.display = '';
+  document.getElementById('btn-pause').style.display = 'none';
+  document.getElementById('btn-stop').style.display = 'none';
+  document.getElementById('btn-pause').textContent = 'Pause';
+  document.getElementById('timer-status').textContent = 'Ready';
+  document.getElementById('timer-task').disabled = false;
+  document.querySelectorAll('.preset-btn').forEach(b => b.style.pointerEvents = '');
+}
+
+function recordSession(seconds) {
+  const session = {
+    id: Date.now().toString(36) + Math.random().toString(36).slice(2,6),
+    task: document.getElementById('timer-task').value.trim() || 'Untitled Session',
+    duration: Math.round(seconds / 60),
+    seconds,
+    date: new Date().toISOString(),
+    day: new Date().toISOString().split('T')[0]
+  };
+  data.sessions.unshift(session);
+  saveLocal(data);
+  refreshStats();
+  syncToCloud();
+}
+
+// ═══════════════════════════════════════════════════════
+// STATS
+// ═══════════════════════════════════════════════════════
+function refreshStats() {
+  const today = new Date().toISOString().split('T')[0];
+  const ts = data.sessions.filter(s => s.day === today);
+  document.getElementById('stat-today-sessions').textContent = ts.length;
+  document.getElementById('stat-today-minutes').textContent = ts.reduce((a,s) => a + s.duration, 0);
+  document.getElementById('stat-total').textContent = data.sessions.length;
+  document.getElementById('stat-streak').textContent = calcStreak();
+}
+
+function calcStreak() {
+  const days = [...new Set(data.sessions.map(s => s.day))].sort().reverse();
+  if (!days.length) return 0;
+  let streak = 0;
+  let check = new Date();
+  check.setHours(0,0,0,0);
+  if (!days.includes(check.toISOString().split('T')[0])) check.setDate(check.getDate() - 1);
+  while (true) {
+    const d = check.toISOString().split('T')[0];
+    if (days.includes(d)) { streak++; check.setDate(check.getDate() - 1); } else break;
+  }
+  return streak;
+}
+
+// ═══════════════════════════════════════════════════════
+// GOALS
+// ═══════════════════════════════════════════════════════
+const CAT = {
+  work:     { icon:'💼', color:'var(--accent)',  bg:'rgba(108,92,231,.12)' },
+  study:    { icon:'📚', color:'var(--blue)',    bg:'var(--blue-bg)' },
+  creative: { icon:'🎨', color:'var(--orange)',  bg:'var(--orange-bg)' },
+  health:   { icon:'💪', color:'var(--green)',   bg:'var(--green-bg)' },
+  personal: { icon:'🧘', color:'var(--red)',     bg:'var(--red-bg)' }
+};
+
+function openGoalModal() { document.getElementById('goal-modal').classList.add('show'); }
+function closeGoalModal() { document.getElementById('goal-modal').classList.remove('show'); }
+
+function saveGoal() {
+  const name = document.getElementById('goal-name').value.trim();
+  const target = parseInt(document.getElementById('goal-target').value);
+  if (!name || !target || target < 5) return;
+  data.goals.push({
+    id: Date.now().toString(36),
+    name, target,
+    category: document.getElementById('goal-category').value
+  });
+  saveLocal(data);
+  closeGoalModal();
+  renderGoals();
+  syncToCloud();
+  showToast('Goal added!');
+  document.getElementById('goal-name').value = '';
+}
+
+function deleteGoal(id) {
+  data.goals = data.goals.filter(g => g.id !== id);
+  saveLocal(data);
+  renderGoals();
+  syncToCloud();
+}
+
+function renderGoals() {
+  const today = new Date().toISOString().split('T')[0];
+  const todayMins = data.sessions.filter(s => s.day === today).reduce((a,s) => a + s.duration, 0);
+
+  document.getElementById('goals-date').textContent =
+    new Date().toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'});
+
+  const list = document.getElementById('goals-list');
+  if (!data.goals.length) {
+    list.innerHTML = '<div class="empty"><div class="icon">🎯</div>No goals yet. Create one to start tracking!</div>';
+    renderWeekStreak(); return;
+  }
+
+  list.innerHTML = data.goals.map(g => {
+    const c = CAT[g.category] || CAT.work;
+    const pct = Math.min(100, Math.round((todayMins / g.target) * 100));
+    return `<div class="goal-item">
+      <div class="goal-icon" style="background:${c.bg}">${c.icon}</div>
+      <div class="goal-info">
+        <div class="goal-name">${esc(g.name)}</div>
+        <div class="goal-meta">${g.target} min/day</div>
+      </div>
+      <div class="goal-progress">
+        <div class="progress-bar"><div class="progress-fill" style="width:${pct}%;background:${pct>=100?'var(--green)':c.color}"></div></div>
+        <div class="progress-text">${todayMins}/${g.target} min (${pct}%)</div>
+      </div>
+      <button class="btn btn-secondary btn-sm" onclick="deleteGoal('${g.id}')" title="Remove">✕</button>
+    </div>`;
+  }).join('');
+  renderWeekStreak();
+}
+
+function renderWeekStreak() {
+  const days = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  const today = new Date();
+  const dow = (today.getDay() + 6) % 7;
+  let html = '', count = 0;
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(today); d.setDate(d.getDate() - dow + i);
+    const ds = d.toISOString().split('T')[0];
+    const has = data.sessions.some(s => s.day === ds);
+    if (has) count++;
+    html += `<div class="streak-dot ${has?'done':'empty'} ${i===dow?'today':''}">${days[i][0]}</div>`;
+  }
+  document.getElementById('week-streak').innerHTML = html;
+  document.getElementById('week-summary').textContent = `${count}/7 days this week`;
+}
+
+// ═══════════════════════════════════════════════════════
+// HISTORY
+// ═══════════════════════════════════════════════════════
+function renderHistory() {
+  const list = document.getElementById('history-list');
+  if (!data.sessions.length) {
+    list.innerHTML = '<div class="empty"><div class="icon">📊</div>No sessions yet. Start a focus session!</div>';
+    return;
+  }
+  list.innerHTML = data.sessions.slice(0,50).map(s => {
+    const t = new Date(s.date).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
+    const d = new Date(s.date).toLocaleDateString('en-US',{month:'short',day:'numeric'});
+    return `<div class="session-item">
+      <div class="session-dot" style="background:var(--accent)"></div>
+      <div class="session-task">${esc(s.task)}</div>
+      <div class="session-duration">${s.duration}m</div>
+      <div class="session-time">${d} ${t}</div>
+    </div>`;
+  }).join('');
+}
+
+function clearHistory() {
+  if (!confirm('Clear all session history? This cannot be undone.')) return;
+  data.sessions = [];
+  saveLocal(data);
+  renderHistory();
+  refreshStats();
+  syncToCloud();
+  showToast('History cleared.');
+}
+
+// ═══════════════════════════════════════════════════════
+// INSIGHTS
+// ═══════════════════════════════════════════════════════
+function renderInsights() {
+  if (data.sessions.length) {
+    const avg = Math.round(data.sessions.reduce((a,s) => a + s.duration, 0) / data.sessions.length);
+    document.getElementById('insight-avg').textContent = avg;
+  }
+  const totalMin = data.sessions.reduce((a,s) => a + s.duration, 0);
+  document.getElementById('insight-total').textContent = totalMin >= 60 ? Math.round(totalMin/60)+'h' : totalMin+'m';
+
+  const dayTotals = {};
+  data.sessions.forEach(s => { dayTotals[s.day] = (dayTotals[s.day]||0) + s.duration; });
+  const best = Object.entries(dayTotals).sort((a,b) => b[1]-a[1])[0];
+  if (best) {
+    const d = new Date(best[0]+'T12:00:00');
+    document.getElementById('insight-best').textContent =
+      d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+  }
+
+  // Weekly chart
+  const chart = document.getElementById('chart-weekly');
+  const today = new Date();
+  const barDays = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(today); d.setDate(d.getDate()-i);
+    const ds = d.toISOString().split('T')[0];
+    barDays.push({
+      label: d.toLocaleDateString('en-US',{weekday:'short'}),
+      value: data.sessions.filter(s=>s.day===ds).reduce((a,s)=>a+s.duration,0)
+    });
+  }
+  const maxV = Math.max(...barDays.map(d=>d.value),1);
+  chart.innerHTML = barDays.map(d => {
+    const h = Math.max(4,(d.value/maxV)*130);
+    return `<div class="bar-col">
+      <div class="bar-value">${d.value>0?d.value+'m':''}</div>
+      <div class="bar" style="height:${h}px;${d.value===0?'background:var(--surface2)':''}"></div>
+      <div class="bar-label">${d.label}</div>
+    </div>`;
+  }).join('');
+
+  // Top tasks
+  const taskMap = {};
+  data.sessions.forEach(s => { taskMap[s.task||'Untitled'] = (taskMap[s.task||'Untitled']||0)+s.duration; });
+  const sorted = Object.entries(taskMap).sort((a,b)=>b[1]-a[1]).slice(0,5);
+  const cont = document.getElementById('top-tasks');
+  if (!sorted.length) { cont.innerHTML = '<div class="empty">No data yet.</div>'; return; }
+  const mx = sorted[0][1];
+  cont.innerHTML = sorted.map(([task,mins]) => {
+    const pct = Math.round((mins/mx)*100);
+    return `<div style="margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:3px">
+        <span>${esc(task)}</span><span style="color:var(--text-muted)">${mins}m</span>
+      </div>
+      <div class="progress-bar"><div class="progress-fill" style="width:${pct}%;background:var(--accent)"></div></div>
+    </div>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════════════════════════
+// SETTINGS
+// ═══════════════════════════════════════════════════════
+function renderSettings() {
+  const cfg = localStorage.getItem(CONFIG_KEY);
+  if (cfg) {
+    document.getElementById('firebase-config-input').value = cfg;
+    document.getElementById('firebase-config-status').textContent = 'Config saved.';
+  }
+  updateSyncUI();
+}
+
+function requestNotifPermission() {
+  if ('Notification' in window) {
+    Notification.requestPermission().then(p => {
+      showToast(p === 'granted' ? 'Notifications enabled!' : 'Notifications blocked.');
+    });
+  }
+}
+
+function exportData() {
+  const blob = new Blob([JSON.stringify(data,null,2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'focusflow-export-' + new Date().toISOString().split('T')[0] + '.json';
+  a.click();
+  showToast('Data exported!');
+}
+
+function importData(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(ev) {
+    try {
+      const imported = JSON.parse(ev.target.result);
+      if (imported.sessions && imported.goals) {
+        // Merge: add sessions that don't exist locally
+        const existingIds = new Set(data.sessions.map(s => s.id));
+        const newSessions = imported.sessions.filter(s => !existingIds.has(s.id));
+        data.sessions = [...newSessions, ...data.sessions].sort((a,b) => new Date(b.date)-new Date(a.date));
+
+        const existingGoalIds = new Set(data.goals.map(g => g.id));
+        const newGoals = imported.goals.filter(g => !existingGoalIds.has(g.id));
+        data.goals = [...data.goals, ...newGoals];
+
+        saveLocal(data);
+        refreshStats();
+        syncToCloud();
+        showToast(`Imported ${newSessions.length} sessions, ${newGoals.length} goals.`);
+      } else {
+        showToast('Invalid file format.');
+      }
+    } catch(err) {
+      showToast('Failed to parse file.');
+    }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+}
+
+function nukeData() {
+  if (!confirm('Delete ALL local data? This cannot be undone.')) return;
+  if (!confirm('Are you really sure?')) return;
+  data = { sessions: [], goals: [], lastSync: null };
+  saveLocal(data);
+  refreshStats();
+  showToast('All data deleted.');
+}
+
+// ═══════════════════════════════════════════════════════
+// FIREBASE CONFIG & CLOUD SYNC
+// ═══════════════════════════════════════════════════════
+let firebaseReady = false;
+let firebaseUser = null;
+let db = null;
+
+function saveFirebaseConfig() {
+  const raw = document.getElementById('firebase-config-input').value.trim();
+  if (!raw) return;
+  try {
+    JSON.parse(raw);
+    localStorage.setItem(CONFIG_KEY, raw);
+    document.getElementById('firebase-config-status').textContent =
+      'Config saved! Reload the page to connect.';
+    document.getElementById('firebase-config-status').style.color = 'var(--green)';
+    showToast('Firebase config saved. Reload to connect.');
+  } catch(e) {
+    document.getElementById('firebase-config-status').textContent = 'Invalid JSON.';
+    document.getElementById('firebase-config-status').style.color = 'var(--red)';
+  }
+}
+
+function clearFirebaseConfig() {
+  localStorage.removeItem(CONFIG_KEY);
+  document.getElementById('firebase-config-input').value = '';
+  document.getElementById('firebase-config-status').textContent = 'Config cleared. Reload to disconnect.';
+  document.getElementById('firebase-config-status').style.color = 'var(--text-muted)';
+}
+
+async function initFirebase() {
+  const raw = localStorage.getItem(CONFIG_KEY);
+  if (!raw) return;
+
+  let config;
+  try { config = JSON.parse(raw); } catch(e) { return; }
+
+  // Dynamically load Firebase SDK (compat mode for simplicity)
+  await loadScript('https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js');
+  await loadScript('https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js');
+  await loadScript('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js');
+
+  if (!firebase.apps.length) {
+    firebase.initializeApp(config);
+  }
+
+  db = firebase.firestore();
+
+  // Enable offline persistence
+  try { await db.enablePersistence({ synchronizeTabs: true }); } catch(e) {}
+
+  firebaseReady = true;
+
+  // Listen for auth changes
+  firebase.auth().onAuthStateChanged(user => {
+    firebaseUser = user;
+    updateSyncUI();
+    if (user) pullFromCloud();
+  });
+}
+
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    if (document.querySelector(`script[src="${src}"]`)) { resolve(); return; }
+    const s = document.createElement('script');
+    s.src = src; s.onload = resolve; s.onerror = reject;
+    document.head.appendChild(s);
+  });
+}
+
+function handleAuthClick() {
+  if (!firebaseReady) {
+    showToast('Set up Firebase config in Settings first.');
+    showPage('settings');
+    return;
+  }
+  if (firebaseUser) {
+    if (confirm('Sign out of sync?')) {
+      firebase.auth().signOut();
+      showToast('Signed out.');
+    }
+  } else {
+    const provider = new firebase.auth.GoogleAuthProvider();
+    firebase.auth().signInWithPopup(provider).catch(err => {
+      // Fallback to redirect for mobile
+      firebase.auth().signInWithRedirect(provider);
+    });
+  }
+}
+
+function updateSyncUI() {
+  const dot = document.getElementById('sync-dot');
+  const name = document.getElementById('user-name');
+  const avatar = document.getElementById('user-avatar');
+
+  if (firebaseUser) {
+    dot.className = 'sync-dot online';
+    name.textContent = firebaseUser.displayName || firebaseUser.email || 'Synced';
+    if (firebaseUser.photoURL) {
+      avatar.innerHTML = `<img src="${firebaseUser.photoURL}" alt="">`;
+    } else {
+      avatar.textContent = (firebaseUser.displayName || 'U')[0];
+    }
+    // Settings page
+    const btn = document.getElementById('settings-auth-btn');
+    if (btn) { btn.textContent = 'Sign Out'; }
+    const status = document.getElementById('settings-sync-status');
+    if (status) { status.textContent = `Signed in as ${firebaseUser.displayName || firebaseUser.email}`; }
+    const desc = document.getElementById('settings-sync-desc');
+    if (desc) { desc.textContent = 'Your data syncs automatically across devices.'; }
+    const syncRow = document.getElementById('force-sync-row');
+    if (syncRow) { syncRow.style.display = ''; }
+  } else if (firebaseReady) {
+    dot.className = 'sync-dot offline';
+    name.textContent = 'Sign in to sync';
+    avatar.textContent = '👤';
+  } else {
+    dot.className = 'sync-dot none';
+    name.textContent = 'Sync not set up';
+    avatar.textContent = '👤';
+  }
+}
+
+async function syncToCloud() {
+  if (!firebaseReady || !firebaseUser || !db) return;
+  try {
+    await db.collection('users').doc(firebaseUser.uid).set({
+      sessions: data.sessions,
+      goals: data.goals,
+      lastSync: new Date().toISOString(),
+      email: firebaseUser.email
+    }, { merge: true });
+    data.lastSync = new Date().toISOString();
+    saveLocal(data);
+  } catch(e) {
+    console.warn('Sync error:', e);
+  }
+}
+
+async function pullFromCloud() {
+  if (!firebaseReady || !firebaseUser || !db) return;
+  try {
+    const doc = await db.collection('users').doc(firebaseUser.uid).get();
+    if (doc.exists) {
+      const cloud = doc.data();
+      // Merge sessions
+      const localIds = new Set(data.sessions.map(s => s.id));
+      const cloudNew = (cloud.sessions || []).filter(s => !localIds.has(s.id));
+      if (cloudNew.length) {
+        data.sessions = [...data.sessions, ...cloudNew]
+          .sort((a,b) => new Date(b.date) - new Date(a.date));
+      }
+      // Merge goals
+      const localGoalIds = new Set(data.goals.map(g => g.id));
+      const cloudGoals = (cloud.goals || []).filter(g => !localGoalIds.has(g.id));
+      if (cloudGoals.length) {
+        data.goals = [...data.goals, ...cloudGoals];
+      }
+      saveLocal(data);
+      refreshStats();
+      if (cloudNew.length || cloudGoals.length) {
+        showToast(`Synced ${cloudNew.length} sessions, ${cloudGoals.length} goals from cloud.`);
+      }
+    } else {
+      // First time — push local to cloud
+      syncToCloud();
+    }
+  } catch(e) {
+    console.warn('Pull error:', e);
+  }
+}
+
+async function forceSync() {
+  await syncToCloud();
+  await pullFromCloud();
+  showToast('Sync complete!');
+}
+
+// ═══════════════════════════════════════════════════════
+// PWA INSTALL
+// ═══════════════════════════════════════════════════════
+let deferredInstallPrompt = null;
+
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+  document.getElementById('install-banner').classList.add('show');
+});
+
+function installApp() {
+  if (!deferredInstallPrompt) return;
+  deferredInstallPrompt.prompt();
+  deferredInstallPrompt.userChoice.then(result => {
+    deferredInstallPrompt = null;
+    document.getElementById('install-banner').classList.remove('show');
+    if (result.outcome === 'accepted') showToast('App installed!');
+  });
+}
+
+function dismissInstall() {
+  document.getElementById('install-banner').classList.remove('show');
+}
+
+window.addEventListener('appinstalled', () => {
+  document.getElementById('install-banner').classList.remove('show');
+  showToast('FocusFlow installed!');
+});
+
+// ═══════════════════════════════════════════════════════
+// UTILITIES
+// ═══════════════════════════════════════════════════════
+function esc(str) {
+  const d = document.createElement('div');
+  d.textContent = str;
+  return d.innerHTML;
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(t._timeout);
+  t._timeout = setTimeout(() => t.classList.remove('show'), 3500);
+}
+
+// Keyboard shortcut
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  if (e.code === 'Space') {
+    e.preventDefault();
+    if (!timerRunning && !timerPaused) startTimer();
+    else if (timerRunning) pauseTimer();
+    else if (timerPaused) startTimer();
+  }
+});
+
+// Modal close on overlay
+document.getElementById('goal-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeGoalModal();
+});
+
+// Notification permission
+if ('Notification' in window && Notification.permission === 'default') {
+  Notification.requestPermission();
+}
+
+// ═══════════════════════════════════════════════════════
+// SERVICE WORKER & INIT
+// ═══════════════════════════════════════════════════════
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./sw.js').catch(err =>
+    console.warn('SW registration failed:', err)
+  );
+}
+
+// Boot
+updateTimerDisplay();
+refreshStats();
+initFirebase();
+</script>
+</body>
+</html>
